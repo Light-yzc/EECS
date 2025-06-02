@@ -147,7 +147,9 @@ def nn_forward_pass(params: Dict[str, torch.Tensor], X: torch.Tensor):
     # shape (N, C).                                                            #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    hidden = (X @ W1) + b1
+    relu = torch.max(hidden, torch.zeros_like(hidden))
+    scores = (relu @ W2 ) + b2
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -212,7 +214,11 @@ def nn_forward_backward(
     # (Check Numeric Stability in http://cs231n.github.io/linear-classify/).   #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    stable_scores = scores - torch.max(scores)
+    exp = torch.exp(stable_scores)
+    prob = exp / torch.sum(exp, dim=1).unsqueeze(1)
+    loss = -torch.sum(torch.log(prob[torch.arange(X.shape[0]), y]))
+    loss = loss / X.shape[0] + reg * (torch.sum(W1 * W1) + torch.sum(W2 * W2))
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -226,7 +232,17 @@ def nn_forward_backward(
     # tensor of same size                                                     #
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    dscores = prob.clone()
+    dscores[torch.arange(N), y] -= 1
+    dscores = dscores / N
+    dw2 = h1.T @ dscores + 2  * reg * W2
+    db2 = torch.sum(dscores, dim=0)
+    dh1 = dscores @ W2.T
+    # dh1[h1 == 0] = 0
+    dh1 = dh1 * (h1 > 0).float()
+    dw1 = X.T @ dh1 + 2 * reg * W1
+    db1 = dh1.sum(dim=0)
+    grads = {'W1':dw1, 'b1':db1, 'W2':dw2, 'b2':db2}
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -299,7 +315,6 @@ def nn_train(
         # Compute loss and gradients using the current minibatch
         loss, grads = loss_func(params, X_batch, y=y_batch, reg=reg)
         loss_history.append(loss.item())
-
         #########################################################################
         # TODO: Use the gradients in the grads dictionary to update the         #
         # parameters of the network (stored in the dictionary self.params)      #
@@ -307,7 +322,11 @@ def nn_train(
         # stored in the grads dictionary defined above.                         #
         #########################################################################
         # Replace "pass" statement with your code
-        pass
+        params['W1'] -= grads['W1'] * learning_rate
+        params['W2'] -= grads['W2'] * learning_rate
+        params['b1'] -= grads['b1'] * learning_rate
+        params['b2'] -= grads['b2'] * learning_rate
+
         #########################################################################
         #                             END OF YOUR CODE                          #
         #########################################################################
@@ -365,13 +384,12 @@ def nn_predict(
     # TODO: Implement this function; it should be VERY simple!                #
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    y_pred = torch.argmax(nn_forward_pass(params, X)[0], dim=1)
     ###########################################################################
     #                              END OF YOUR CODE                           #
     ###########################################################################
 
     return y_pred
-
 
 def nn_get_search_params():
     """
@@ -399,7 +417,10 @@ def nn_get_search_params():
     # classifier.                                                             #
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    learning_rates = [1]
+    hidden_sizes = [512]
+    regularization_strengths = [1e-3]
+    learning_rate_decays = [0.85]
     ###########################################################################
     #                           END OF YOUR CODE                              #
     ###########################################################################
@@ -460,7 +481,23 @@ def find_best_net(
     # automatically like we did on the previous exercises.                      #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    param_dict = get_param_set_fn()
+    for lr in param_dict[0]:
+        for hs in param_dict[1]:
+            for reg in param_dict[2]:
+                for lrd in param_dict[3]:
+                    print('start train, cur params:\nlr:{}\nhs:{}\nreg:{}\nlrd:{}\n'.format(lr,hs,reg,lrd))
+                    net = TwoLayerNet(3 * 32 * 32, hs, 10, device=data_dict['X_train'].device, dtype=data_dict['X_train'].dtype)
+                    stats = net.train(data_dict['X_train'], data_dict['y_train'], data_dict['X_val'], data_dict['y_val'],
+                                      num_iters=3000, batch_size=1000,
+                                      learning_rate=lr, learning_rate_decay=lrd,
+                                      reg=reg, verbose=False)
+                    val_acc = max(stats['val_acc_history'])
+                    if val_acc > best_val_acc:
+                        best_val_acc = val_acc
+                        best_net = net
+                        best_stat = stats
+                        print('cur best val_acc {}'.format(val_acc))
     #############################################################################
     #                               END OF YOUR CODE                            #
     #############################################################################
