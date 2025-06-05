@@ -160,6 +160,7 @@ class Solver(object):
 
         # Perform a parameter update
         with torch.no_grad():
+            # print(grads.keys())
             for p, w in self.model.params.items():
                 dw = grads[p]
                 config = self.optim_configs[p]
