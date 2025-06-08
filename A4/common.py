@@ -84,7 +84,12 @@ class DetectorBackboneWithFPN(nn.Module):
         self.fpn_params = nn.ModuleDict()
 
         # Replace "pass" statement with your code
-        pass
+        i = 3
+        for name, feature_shape in dummy_out_shapes:
+            self.fpn_params[name] =  nn.Conv2d(feature_shape[1], self.out_channels, 1)
+            self.fpn_params['mergeP{}'.format(i)] = nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1)
+            i += 1
+        # print(self.fpn_params.keys())
         ######################################################################
         #                            END OF YOUR CODE                        #
         ######################################################################
@@ -111,7 +116,17 @@ class DetectorBackboneWithFPN(nn.Module):
         ######################################################################
 
         # Replace "pass" statement with your code
-        pass
+        cur_value = images
+        # print(backbone_feats)            
+        p5 = self.fpn_params['c5'](backbone_feats['c5'])
+        p5 = self.fpn_params['mergeP5'](p5)
+        p4 = self.fpn_params['c4'](backbone_feats['c4']) + F.interpolate(p5, size=p5.shape[3] *2)
+        p4 = self.fpn_params['mergeP4'](p4)
+        p3 = self.fpn_params['c3'](backbone_feats['c3']) + F.interpolate(p4, size=p4.shape[3] *2)
+        p3 = self.fpn_params['mergeP3'](p3)
+        fpn_feats["p3"] = p3
+        fpn_feats["p4"] = p4
+        fpn_feats['p5'] = p5
         ######################################################################
         #                            END OF YOUR CODE                        #
         ######################################################################
@@ -157,7 +172,16 @@ def get_fpn_location_coords(
         # TODO: Implement logic to get location co-ordinates below.          #
         ######################################################################
         # Replace "pass" statement with your code
-        pass
+        print('featshape' + str(feat_shape))
+        level_ctr = torch.zeros(feat_shape[2] * feat_shape[3], 2, dtype=dtype, device=device)
+        for i in range(feat_shape[2]):
+            for j in range(feat_shape[3]):
+                # print(feat_shape[0] * feat_shape[1])
+                level_ctr[(i * feat_shape[2] + j), 0] = level_stride * (i + 0.5)
+                level_ctr[(i * feat_shape[2] + j), 1] = level_stride * (j + 0.5)
+        # print(level_ctr.shape)
+        # print(feat_shape)
+        location_coords[level_name] = level_ctr
         ######################################################################
         #                             END OF YOUR CODE                       #
         ######################################################################
@@ -196,7 +220,49 @@ def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float = 0.5):
     # github.com/pytorch/vision/blob/main/torchvision/csrc/ops/cpu/nms_kernel.cpp
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    keep = []
+    x1 = boxes[:,0]
+    y1 = boxes[:,1]
+    x2 = boxes[:,2]
+    y2 = boxes[:,3]
+    areas = (x2 - x1) * (y2 - y1)
+    _, order = scores.sort(0, descending=True)
+    while order.numel() > 0:
+        # 1. 选择得分最高的框（当前列表中的第一个）
+        i = order[0] # 获取原始索引
+        keep.append(i)
+
+        if order.numel() == 1: # 如果只剩下一个框，就结束
+            break
+
+        # 获取当前最高得分框的坐标
+        xx1 = torch.max(x1[order[1:]], x1[i])
+        yy1 = torch.max(y1[order[1:]], y1[i])
+        xx2 = torch.min(x2[order[1:]], x2[i])
+        yy2 = torch.min(y2[order[1:]], y2[i])
+
+        # 计算交集区域的宽度和高度
+        w = torch.max(torch.tensor(0.0, device=boxes.device), xx2 - xx1)
+        h = torch.max(torch.tensor(0.0, device=boxes.device), yy2 - yy1)
+
+        # 计算交集面积
+        inter = w * h
+
+        # 计算 IoU
+        # 交集 / (当前框面积 + 其他框面积 - 交集)
+        union = areas[order[1:]] + areas[i] - inter
+        iou = inter / union
+
+        # 2. 消除 IoU > iou_threshold 的框
+        # `inds` 包含了 IoU 小于等于阈值的其他框的索引
+        inds = torch.where(iou <= iou_threshold)[0]
+
+        # 3. 如果还有框剩下，继续 GOTO 1
+        # 更新 `order`，只保留那些 IoU <= iou_threshold 的框的索引
+        # 由于 `order[1:]` 是相对于 `order` 的切片，所以 `inds` 是相对于 `order[1:]` 的索引
+        order = order[inds + 1] # +1 是因为 `order[1:]` 从第二个元素开始
+
+    keep = torch.tensor(keep, dtype=torch.long, device=boxes.device)
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
