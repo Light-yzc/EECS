@@ -116,7 +116,6 @@ class DetectorBackboneWithFPN(nn.Module):
         ######################################################################
 
         # Replace "pass" statement with your code
-        cur_value = images
         # print(backbone_feats)            
         p5 = self.fpn_params['c5'](backbone_feats['c5'])
         p5 = self.fpn_params['mergeP5'](p5)
@@ -172,8 +171,7 @@ def get_fpn_location_coords(
         # TODO: Implement logic to get location co-ordinates below.          #
         ######################################################################
         # Replace "pass" statement with your code
-        print('featshape' + str(feat_shape))
-        level_ctr = torch.zeros(feat_shape[2] * feat_shape[3], 2, dtype=dtype, device=device)
+        level_ctr = torch.zeros((feat_shape[2] * feat_shape[3], 2), dtype=dtype, device=device)
         for i in range(feat_shape[2]):
             for j in range(feat_shape[3]):
                 # print(feat_shape[0] * feat_shape[1])
