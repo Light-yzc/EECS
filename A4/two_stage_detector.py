@@ -664,15 +664,13 @@ class RPN(nn.Module):
             fg_indx, bg_inx = sample_rpn_training(matched_gt_boxes, self.batch_size_per_image * num_images, 0.5)
             sample_idx = torch.cat([fg_indx, bg_inx], dim = 0)
 
-            #sample anchor_boxs, gt_boxes
-            sample_anchor_boxes = anchor_boxes[fg_indx]
-            sample_gt_boxes = matched_gt_boxes[fg_indx]
-            sample_deltas = rcnn_get_deltas_from_anchors(sample_anchor_boxes, sample_gt_boxes)
+            deltas = rcnn_get_deltas_from_anchors(anchor_boxes, matched_gt_boxes)
             sample_pred_obj_logits = pred_obj_logits[sample_idx]
             obj_true = (matched_gt_boxes[:, 4] > 0).type(pred_obj_logits.dtype)
             # obj_true[obj_true < 0] = 0
             obj_true = obj_true[sample_idx]
             pred_boxreg_deltas = pred_boxreg_deltas[fg_indx]
+            sample_deltas = deltas[fg_indx]
             loss_obj = F.binary_cross_entropy_with_logits(sample_pred_obj_logits, obj_true, reduction="none") # don't sure because I don't show tensor shapes
             loss_box = F.l1_loss(pred_boxreg_deltas, sample_deltas, reduction="none")
             loss_box[sample_deltas <= -1e8] *= 0.0
